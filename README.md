@@ -405,3 +405,281 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     List<ProductStats> findAveragePriceByCategory();
 }
 ```
+
+---
+
+## Add the following enhancements to the Spring project based on the sample HR database:
+
+- Create new entities: Location, Country, and Region.
+- Update the Department entity:
+- Add a relationship to Location.
+- Add a manager property (linked to the appropriate employee entity).
+- Implement an API endpoint to retrieve a list of all departments with the following fields: Department name, Manager full name (concatenation of firstName and lastName), Country, City, Street address.
+- The API should support filtering by:
+Country
+City
+
+## Location Entity
+
+```
+package ge.ibsu.demo.entities;
+
+import jakarta.persistence.*;
+
+import java.util.List;
+
+@Entity
+public class Location {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String streetAddress;
+    private String city;
+
+    @ManyToOne
+    @JoinColumn(name = "country_id")
+    private Country country;
+
+    @OneToMany(mappedBy = "location")
+    private List<Department> departments;
+
+    public String getStreetAddress() {
+        return streetAddress;
+    }
+
+    public void setStreetAddress(String streetAddress) {
+        this.streetAddress = streetAddress;
+    }
+
+    public String getCity() {
+        return city;
+    }
+
+    public void setCity(String city) {
+        this.city = city;
+    }
+
+    public Country getCountry() {
+        return country;
+    }
+
+    public void setCountry(Country country) {
+        this.country = country;
+    }
+
+    public List<Department> getDepartments() {
+        return departments;
+    }
+
+    public void setDepartments(List<Department> departments) {
+        this.departments = departments;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public Long getId() {
+        return id;
+    }
+}
+```
+
+## Country Entity
+
+```
+package ge.ibsu.demo.entities;
+import jakarta.persistence.*;
+
+import java.util.List;
+
+
+@Entity
+public class Country {
+    @Id
+    private String id;
+    private String name;
+
+    @ManyToOne
+    @JoinColumn(name= "region_id")
+    private Region region;
+
+    @OneToMany(mappedBy = "country")
+    private List<Location> locations;
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public void setId(String id) {
+        this.id = id;
+    }
+
+    public String getId() {
+        return id;
+    }
+}
+```
+
+## Region Entity
+
+```
+package ge.ibsu.demo.entities;
+
+import jakarta.persistence.*;
+
+import java.util.List;
+
+@Entity
+public class Region {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String name;
+
+    @OneToMany(mappedBy = "region")
+    private List<Country> countries;
+}
+```
+
+## Department Entity
+
+```
+package ge.ibsu.demo.entities;
+
+import jakarta.persistence.*;
+import org.apache.catalina.Manager;
+
+@Entity
+@Table(name = "departments")
+public class Department {
+
+    @Id
+    @Column(name = "department_id")
+    private Long id;
+
+    @Column(name = "department_name")
+    private String name;
+
+    @ManyToOne
+    @JoinColumn(name = "location_id")
+    private Location location;
+
+    @ManyToOne
+    @JoinColumn(name = "manager_id")
+    private Employee manager;
+
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+}
+```
+
+## DepartmentRepository.java
+
+```
+package ge.ibsu.demo.repositories;
+
+import ge.ibsu.demo.dto.DepartmentDetails;
+import ge.ibsu.demo.entities.Department;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+
+@Repository
+public interface DepartmentRepository extends JpaRepository<Department, Long> {
+    @Query("""
+        SELECT new ge.ibsu.demo.dto.DepartmentDetails(
+            d.name,
+            CONCAT(m.firstName, ' ', m.lastName),
+            c.name,
+            l.city,
+            l.streetAddress
+        )
+        FROM Department d
+        LEFT JOIN d.manager m
+        LEFT JOIN d.location l
+        LEFT JOIN l.country c
+        WHERE (:country IS NULL OR c.name = :country)
+        AND (:city IS NULL OR l.city = :city)
+    """)
+    List<DepartmentDetails> findDepartments(
+            @Param("country") String country,
+            @Param("city") String city
+    );
+}
+```
+
+## DepartmentController.java
+
+```
+package ge.ibsu.demo.controllers;
+
+import ge.ibsu.demo.dto.DepartmentDetails;
+import ge.ibsu.demo.entities.Department;
+import ge.ibsu.demo.entities.Employee;
+import ge.ibsu.demo.services.DepartmentService;
+import ge.ibsu.demo.services.EmployeeService;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/departments")
+public class DepartmentController {
+
+    private final DepartmentService departmentService;
+
+    private final EmployeeService employeeService;
+
+    public DepartmentController(DepartmentService departmentService, EmployeeService employeeService) {
+        this.departmentService = departmentService;
+        this.employeeService = employeeService;
+    }
+
+    @GetMapping("/all")
+    public List<Department> getAll() {
+        return departmentService.getAll();
+    }
+
+    @GetMapping("/{id}")
+    public Department getById(@PathVariable Long id) throws Exception {
+        return departmentService.getById(id);
+    }
+
+    @GetMapping("/{id}/employees")
+    public List<Employee> getEmployees(@PathVariable Long id) {
+        return employeeService.getByDepartment(id);
+    }
+
+    @GetMapping("/details")
+    public List<DepartmentDetails> getDepartments(
+            @RequestParam(required = false) String country,
+            @RequestParam(required = false) String city
+    ) {
+        return departmentService.getDepartments(country, city);
+    }
+}
+```
