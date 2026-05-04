@@ -1,8 +1,6 @@
-# java-midterm
-
 ## 1.Create a Product entity Create a JPA entity class called Product mapped to the table products.
 
-### It must have: - id (Long, auto-generated primary key) - name (String, not nullable, max 100 chars) - price (BigDecimal, not nullable) - category (String) - createdAt (LocalDateTime, set automatically before persist) . Map a one-to-many relationship
+ It must have: - id (Long, auto-generated primary key) - name (String, not nullable, max 100 chars) - price (BigDecimal, not nullable) - category (String) - createdAt (LocalDateTime, set automatically before persist) . Map a one-to-many relationship
 
 ---
 
@@ -138,8 +136,7 @@ public class Review {
 - @PrePersist ensures createdAt is set automatically before insertion.
 - cascade = CascadeType.ALL lets operations on Product propagate to Review.
 - orphanRemoval = true ensures removed child entities are deleted.
-- You can replace Review with any domain (e.g., OrderItem, Image, etc.).
-- 
+- You can replace Review with any domain (e.g., OrderItem, Image, etc.)
 ---
   
 ## 2. You have two entities: Author and Book. Create both classes so that:
@@ -277,3 +274,134 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 - LIKE CONCAT('%', :customerName, '%') enables partial search.
 - o.status = :status filters by the given enum.
 - ORDER BY o.createdAt DESC ensures latest orders come first.
+
+---
+## 4. JOIN FETCH to avoid N+1 Write a repository method that loads all Department entities and eagerly fetches their employees collection in a single SQL query. Without JOIN FETCH this would trigger N+1 queries.
+
+```
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+
+import java.util.List;
+
+public interface DepartmentRepository extends JpaRepository<Department, Long> {
+
+    @Query("""
+        SELECT DISTINCT d
+        FROM Department d
+        JOIN FETCH d.employees
+    """)
+    List<Department> findAllWithEmployees();
+}
+```
+
+---
+
+## 5. Interface-based projection. The full Employee entity has many fields. Create an interface-based projection called EmployeeSummary that exposes only id, firstName, lastName, and email. Then add a repository method that returns all employees as this projection
+
+### - Create this projection
+
+```
+package ge.ibsu.demo.projection;
+
+public interface EmployeeSummary {
+    Long getId();
+    String getFirstName();
+    String getLastName();
+    String getEmail();
+}
+```
+
+### - Then in EmployeeRepository:
+
+```
+package ge.ibsu.demo.repository;
+
+import ge.ibsu.demo.entity.Employee;
+import ge.ibsu.demo.projection.EmployeeSummary;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+
+public interface EmployeeRepository extends JpaRepository<Employee, Long> {
+
+    List<EmployeeSummary> findAllProjectedBy();
+}
+```
+
+### findAllProjectedBy() tells Spring Data JPA: return all employees, but only map the fields exposed by EmployeeSummary.
+
+The method expects your Employee entity to have these fields or getters:
+
+```
+private Long id;
+private String firstName;
+private String lastName;
+private String email;
+```
+
+---
+
+## 6. DTO (class-based) projection with @Query Create a DTO class called ProductStats that holds category (String) and averagePrice (Double). Then write a JPQL query in ProductRepository that returns average price grouped by category as a list of ProductStats. 
+
+Hint: Given context @Entity @Table(name = "products") public class Product { @Id Long id; String name; BigDecimal price; String category; }
+
+## 6.1 Create the DTO class (ProductStats)
+
+This is a plain Java class (not an entity):
+
+```
+package ge.ibsu.demo.dto;
+
+public class ProductStats {
+
+    private String category;
+    private Double averagePrice;
+
+    public ProductStats(String category, Double averagePrice) {
+        this.category = category;
+        this.averagePrice = averagePrice;
+    }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public Double getAveragePrice() {
+        return averagePrice;
+    }
+}
+```
+
+🔹 Important rule (very important)
+
+👉 JPQL uses the constructor directly, so:
+
+- The constructor must match exactly
+- Order and types must match the query
+
+## 6.2 Repository method with @Query
+
+```
+package ge.ibsu.demo.repository;
+
+import ge.ibsu.demo.dto.ProductStats;
+import ge.ibsu.demo.entity.Product;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+
+import java.util.List;
+
+public interface ProductRepository extends JpaRepository<Product, Long> {
+
+    @Query("""
+        SELECT new ge.ibsu.demo.dto.ProductStats(
+            p.category,
+            AVG(p.price)
+        )
+        FROM Product p
+        GROUP BY p.category
+    """)
+    List<ProductStats> findAveragePriceByCategory();
+}
+```
