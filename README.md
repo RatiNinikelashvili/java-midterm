@@ -1,1 +1,279 @@
 # java-midterm
+
+## 1.Create a Product entity Create a JPA entity class called Product mapped to the table products.
+
+### It must have: - id (Long, auto-generated primary key) - name (String, not nullable, max 100 chars) - price (BigDecimal, not nullable) - category (String) - createdAt (LocalDateTime, set automatically before persist) . Map a one-to-many relationship
+
+---
+
+# Product Entity
+
+
+
+```
+import jakarta.persistence.*;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
+
+@Entity
+@Table(name = "products")
+public class Product {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false, length = 100)
+    private String name;
+
+    @Column(nullable = false)
+    private BigDecimal price;
+
+    private String category;
+
+    @Column(nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    // Example: One Product -> Many Reviews
+    @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Review> reviews;
+
+    @PrePersist
+    protected void onCreate() {
+        this.createdAt = LocalDateTime.now();
+    }
+
+    // Getters and Setters
+
+    public Long getId() {
+        return id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public BigDecimal getPrice() {
+        return price;
+    }
+
+    public void setPrice(BigDecimal price) {
+        this.price = price;
+    }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public void setCategory(String category) {
+        this.category = category;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public List<Review> getReviews() {
+        return reviews;
+    }
+
+    public void setReviews(List<Review> reviews) {
+        this.reviews = reviews;
+    }
+}
+```
+---
+
+# Example Child Entity (Review)
+
+## To complete the one-to-many relationship, here’s a simple Review entity:
+
+```
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "reviews")
+public class Review {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String comment;
+
+    @ManyToOne
+    @JoinColumn(name = "product_id", nullable = false)
+    private Product product;
+
+    // Getters and Setters
+
+    public Long getId() {
+        return id;
+    }
+
+    public String getComment() {
+        return comment;
+    }
+
+    public void setComment(String comment) {
+        this.comment = comment;
+    }
+
+    public Product getProduct() {
+        return product;
+    }
+
+    public void setProduct(Product product) {
+        this.product = product;
+    }
+}
+```
+
+## 💡 Notes
+- @PrePersist ensures createdAt is set automatically before insertion.
+- cascade = CascadeType.ALL lets operations on Product propagate to Review.
+- orphanRemoval = true ensures removed child entities are deleted.
+- You can replace Review with any domain (e.g., OrderItem, Image, etc.).
+- 
+---
+  
+## 2. You have two entities: Author and Book. Create both classes so that:
+- One Author can have many Books (bidirectional)
+- The books collection is lazily loaded
+- Book has a ManyToOne back-reference to Author
+- The foreign key column in books table is named author_id
+
+## Author Class
+
+```
+import jakarta.persistence.*;
+import java.util.ArrayList;
+import java.util.List;
+
+@Entity
+@Table(name = "authors")
+public class Author {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String name;
+
+    @OneToMany(
+        mappedBy = "author",
+        fetch = FetchType.LAZY,
+        cascade = CascadeType.ALL,
+        orphanRemoval = true
+    )
+    private List<Book> books = new ArrayList<>();
+
+    public Long getId() {
+        return id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public List<Book> getBooks() {
+        return books;
+    }
+
+    public void addBook(Book book) {
+        books.add(book);
+        book.setAuthor(this);
+    }
+
+    public void removeBook(Book book) {
+        books.remove(book);
+        book.setAuthor(null);
+    }
+}
+```
+
+## Book Class
+
+```
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "books")
+public class Book {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String title;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "author_id", nullable = false)
+    private Author author;
+
+    public Long getId() {
+        return id;
+    }
+
+    public String getTitle() {
+        return title;
+    }
+
+    public void setTitle(String title) {
+        this.title = title;
+    }
+
+    public Author getAuthor() {
+        return author;
+    }
+
+    public void setAuthor(Author author) {
+        this.author = author;
+    }
+}
+```
+
+---
+
+## 3. Write a JPQL search query In an OrderRepository, write a Spring Data method that:
+- Accepts a String customerName and an OrderStatus status
+- Returns all Orders where the customer name contains the given string (case-insensitive) AND the status matches
+- Results must be ordered by createdAt descending
+  
+```
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.util.List;
+
+public interface OrderRepository extends JpaRepository<Order, Long> {
+
+    @Query("""
+        SELECT o
+        FROM Order o
+        WHERE LOWER(o.customerName) LIKE LOWER(CONCAT('%', :customerName, '%'))
+          AND o.status = :status
+        ORDER BY o.createdAt DESC
+    """)
+    List<Order> findByCustomerNameContainingIgnoreCaseAndStatus(
+            @Param("customerName") String customerName,
+            @Param("status") OrderStatus status
+    );
+}
+```
+
+## ✅ Key Points
+- LOWER(...) ensures case-insensitive matching.
+- LIKE CONCAT('%', :customerName, '%') enables partial search.
+- o.status = :status filters by the given enum.
+- ORDER BY o.createdAt DESC ensures latest orders come first.
