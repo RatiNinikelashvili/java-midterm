@@ -683,3 +683,527 @@ public class DepartmentController {
     }
 }
 ```
+
+
+---
+---
+Question 1 – Advanced JPQL Query with Aggregation
+You are given the following entities:
+@Entitypublic class Student {    @Id    private Long id;    private String fullName;    private Double gpa;    @ManyToOne    private Department department;}
+@Entitypublic class Department {    @Id    private Long id;    private String name;}
+
+Tasks
+
+1. Write a JPQL query that returns:
+
+
+
+o   department name
+o   average GPA of students in that department
+
+1. Return only departments where average GPA is greater than 3.0.
+
+
+2. Sort results by average GPA descending.
+
+
+3. Create a DTO projection named DepartmentAverageDto.
+
+
+4. Write the repository method, service and controller
+
+## dto projection
+
+```
+ package ge.ibsu.demo.dto;
+
+public class DepartmentAverageDto {
+
+    private String departmentName;
+    private Double averageGpa;
+
+    public DepartmentAverageDto(String departmentName, Double averageGpa) {
+        this.departmentName = departmentName;
+        this.averageGpa = averageGpa;
+    }
+
+    public String getDepartmentName() {
+        return departmentName;
+    }
+
+    public Double getAverageGpa() {
+        return averageGpa;
+    }
+}
+```
+
+## JPQL query in repository
+
+```
+package ge.ibsu.demo.repositories;
+
+import ge.ibsu.demo.dto.DepartmentAverageDto;
+import ge.ibsu.demo.entities.Student;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+
+import java.util.List;
+
+public interface StudentRepository extends JpaRepository<Student, Long> {
+
+    @Query("""
+        SELECT new ge.ibsu.demo.dto.DepartmentAverageDto(
+            d.name,
+            AVG(s.gpa)
+        )
+        FROM Student s
+        JOIN s.department d
+        GROUP BY d.name
+        HAVING AVG(s.gpa) > 3.0
+        ORDER BY AVG(s.gpa) DESC
+    """)
+    List<DepartmentAverageDto> getDepartmentAverageGpa();
+}
+```
+
+## Service layer
+
+```
+package ge.ibsu.demo.services;
+
+import ge.ibsu.demo.dto.DepartmentAverageDto;
+import ge.ibsu.demo.repositories.StudentRepository;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+public class StudentService {
+
+    private final StudentRepository studentRepository;
+
+    public StudentService(StudentRepository studentRepository) {
+        this.studentRepository = studentRepository;
+    }
+
+    public List<DepartmentAverageDto> getDepartmentAverageGpa() {
+        return studentRepository.getDepartmentAverageGpa();
+    }
+}
+```
+
+## Controller layer
+
+```
+package ge.ibsu.demo.controllers;
+
+import ge.ibsu.demo.dto.DepartmentAverageDto;
+import ge.ibsu.demo.services.StudentService;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+@RestController
+public class StudentController {
+
+    private final StudentService studentService;
+
+    public StudentController(StudentService studentService) {
+        this.studentService = studentService;
+    }
+
+    @GetMapping("/students/department-average")
+    public List<DepartmentAverageDto> getDepartmentAverageGpa() {
+        return studentService.getDepartmentAverageGpa();
+    }
+}
+```
+---
+
+Question 2 – Interface Projection with Join
+You are given the following entities:
+
+@Entity
+public class Course {
+@Id
+private Long id;
+
+private String title;  
+
+@ManyToOne  
+private Teacher teacher;
+
+}
+
+@Entity
+public class Teacher {
+@Id
+private Long id;
+
+private String fullName;  
+private String email;
+
+}
+
+Tasks
+Create an interface projection named CourseTeacherView that returns:
+o   course title
+
+o   teacher full name
+
+Write a JPQL query using JOIN to populate the projection.
+Create the repository method.
+Write a REST endpoint returning the projection.
+
+## Create Interface Projection
+
+```
+package ge.ibsu.demo.dto;
+
+public interface CourseTeacherView {
+
+    String getCourseTitle();
+
+    String getTeacherFullName();
+}
+```
+## Repository query
+
+```
+package ge.ibsu.demo.repositories;
+
+import ge.ibsu.demo.dto.CourseTeacherView;
+import ge.ibsu.demo.entities.Course;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+
+import java.util.List;
+
+public interface CourseRepository extends JpaRepository<Course, Long> {
+
+    @Query("""
+        SELECT
+            c.title AS courseTitle,
+            t.fullName AS teacherFullName
+        FROM Course c
+        JOIN c.teacher t
+    """)
+    List<CourseTeacherView> getCoursesWithTeachers();
+}
+```
+
+## Service layer
+
+```
+package ge.ibsu.demo.services;
+
+import ge.ibsu.demo.dto.CourseTeacherView;
+import ge.ibsu.demo.repositories.CourseRepository;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+public class CourseService {
+
+    private final CourseRepository courseRepository;
+
+    public CourseService(CourseRepository courseRepository) {
+        this.courseRepository = courseRepository;
+    }
+
+    public List<CourseTeacherView> getCoursesWithTeachers() {
+        return courseRepository.getCoursesWithTeachers();
+    }
+}
+```
+
+## REST controller 
+
+```
+package ge.ibsu.demo.controllers;
+
+import ge.ibsu.demo.dto.CourseTeacherView;
+import ge.ibsu.demo.services.CourseService;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+
+@RestController
+public class CourseController {
+
+    private final CourseService courseService;
+
+    public CourseController(CourseService courseService) {
+        this.courseService = courseService;
+    }
+
+    @GetMapping("/courses/teacher-view")
+    public List<CourseTeacherView> getCoursesWithTeachers() {
+        return courseService.getCoursesWithTeachers();
+    }
+}
+```
+
+
+  
+
+question 3 – DTO Projection with Multiple Conditions
+You are given the following entity:
+
+@Entity
+public class Employee {
+    @Id
+    private Long id;
+
+    private String name;
+    private String department;
+    private Double salary;
+    private Boolean active;
+}
+
+Tasks
+Create a DTO class named EmployeeReportDto containing:
+o   name
+
+o   department
+
+o   salary
+
+Write a JPQL query using constructor projection (new) that returns only active employees with salary greater than 5000.
+Sort results by salary descending and use pagination object.
+Create the repository method, service and controller
+
+
+package ge.ibsu.demo.dto;
+
+public class EmployeeReportDto {
+
+    private String name;
+    private String department;
+    private Double salary;
+
+    public EmployeeReportDto(String name, String department, Double salary) {
+        this.name = name;
+        this.department = department;
+        this.salary = salary;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public String getDepartment() {
+        return department;
+    }
+
+    public Double getSalary() {
+        return salary;
+    }
+}
+
+
+package ge.ibsu.demo.repositories;
+
+import ge.ibsu.demo.dto.EmployeeReportDto;
+import ge.ibsu.demo.entities.Employee;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+
+public interface EmployeeRepository extends JpaRepository<Employee, Long> {
+
+    @Query("""
+        SELECT new ge.ibsu.demo.dto.EmployeeReportDto(
+            e.name,
+            e.department,
+            e.salary
+        )
+        FROM Employee e
+        WHERE e.active = true
+          AND e.salary > 5000
+        ORDER BY e.salary DESC
+    """)
+    Page<EmployeeReportDto> getActiveEmployeesWithHighSalary(Pageable pageable);
+}
+
+
+
+package ge.ibsu.demo.services;
+
+import ge.ibsu.demo.dto.EmployeeReportDto;
+import ge.ibsu.demo.repositories.EmployeeRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+
+@Service
+public class EmployeeService {
+
+    private final EmployeeRepository employeeRepository;
+
+    public EmployeeService(EmployeeRepository employeeRepository) {
+        this.employeeRepository = employeeRepository;
+    }
+
+    public Page<EmployeeReportDto> getEmployeeReport(Pageable pageable) {
+        return employeeRepository.getActiveEmployeesWithHighSalary(pageable);
+    }
+}
+
+
+
+
+package ge.ibsu.demo.controllers;
+
+import ge.ibsu.demo.dto.EmployeeReportDto;
+import ge.ibsu.demo.services.EmployeeService;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+public class EmployeeController {
+
+    private final EmployeeService employeeService;
+
+    public EmployeeController(EmployeeService employeeService) {
+        this.employeeService = employeeService;
+    }
+
+    @GetMapping("/employees/report")
+    public Page<EmployeeReportDto> getEmployeeReport(Pageable pageable) {
+        return employeeService.getEmployeeReport(pageable);
+    }
+}
+
+
+---
+
+Question 4 – Save Operation + Transactional Logic
+You are developing an online bookstore system.
+
+@Entity
+public class Book {
+@Id
+@GeneratedValue
+private Long id;
+
+private String title;  
+private String author;  
+private Double price;  
+private Integer stock;
+
+}
+
+Tasks
+Write a service method that:
+o   saves a new book
+
+o   validates that stock is greater than 0
+
+o   throws an exception if price is negative
+
+Write a JPQL query that selects books with stock less than 5.
+Create the repository method, service and controller.
+
+
+package ge.ibsu.demo.repositories;
+
+import ge.ibsu.demo.entities.Book;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+
+import java.util.List;
+
+public interface BookRepository extends JpaRepository<Book, Long> {
+
+    @Query("""
+        SELECT b
+        FROM Book b
+        WHERE b.stock < 5
+    """)
+    List<Book> findLowStockBooks();
+}
+
+
+
+
+
+package ge.ibsu.demo.services;
+
+import ge.ibsu.demo.entities.Book;
+import ge.ibsu.demo.repositories.BookRepository;
+import jakarta.transaction.Transactional;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+
+@Service
+public class BookService {
+
+    private final BookRepository bookRepository;
+
+    public BookService(BookRepository bookRepository) {
+        this.bookRepository = bookRepository;
+    }
+
+    @Transactional
+    public Book saveBook(Book book) {
+
+        if (book.getStock() == null || book.getStock() <= 0) {
+            throw new RuntimeException("Stock must be greater than 0");
+        }
+
+        if (book.getPrice() == null || book.getPrice() < 0) {
+            throw new RuntimeException("Price cannot be negative");
+        }
+
+        return bookRepository.save(book);
+    }
+
+    public List<Book> getLowStockBooks() {
+        return bookRepository.findLowStockBooks();
+    }
+}
+
+
+
+
+package ge.ibsu.demo.controllers;
+
+import ge.ibsu.demo.entities.Book;
+import ge.ibsu.demo.services.BookService;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/books")
+public class BookController {
+
+    private final BookService bookService;
+
+    public BookController(BookService bookService) {
+        this.bookService = bookService;
+    }
+
+    @PostMapping
+    public Book saveBook(@RequestBody Book book) {
+        return bookService.saveBook(book);
+    }
+
+    @GetMapping("/low-stock")
+    public List<Book> getLowStockBooks() {
+        return bookService.getLowStockBooks();
+    }
+}
+
+
+
+
+
