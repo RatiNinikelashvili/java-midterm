@@ -1206,4 +1206,220 @@ public class BookController {
 
 
 
+package com.example.demo;
 
+import jakarta.persistence.*;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.*;
+import org.springframework.data.jpa.repository.*;
+import org.springframework.stereotype.*;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDate;
+import java.util.List;
+
+//////////////////////////////////////
+// ENTITIES
+//////////////////////////////////////
+
+@Entity
+class Product {
+    @Id
+    private Long id;
+    private String name;
+    private Double price;
+
+    @ManyToOne
+    private Category category;
+}
+
+@Entity
+class Category {
+    @Id
+    private Long id;
+    private String title;
+}
+
+@Entity
+class Customer {
+    @Id
+    private Long id;
+    private String fullName;
+
+    @OneToOne
+    private Address address;
+}
+
+@Entity
+class Address {
+    @Id
+    private Long id;
+    private String city;
+    private String country;
+}
+
+@Entity
+class OrderEntity {
+    @Id
+    private Long id;
+    private String customerName;
+    private Double totalAmount;
+    private LocalDate orderDate;
+}
+
+@Entity
+class Teacher {
+    @Id
+    @GeneratedValue
+    private Long id;
+
+    private String name;
+    private String subject;
+    private Double salary;
+}
+
+//////////////////////////////////////
+// DTOs
+//////////////////////////////////////
+
+// Question 1 DTO
+class CategoryStatsDto {
+    private String title;
+    private Long productCount;
+
+    public CategoryStatsDto(String title, Long productCount) {
+        this.title = title;
+        this.productCount = productCount;
+    }
+
+    public String getTitle() { return title; }
+    public Long getProductCount() { return productCount; }
+}
+
+// Question 3 DTO
+class OrderSummaryDto {
+    private String customerName;
+    private Double totalAmount;
+
+    public OrderSummaryDto(String customerName, Double totalAmount) {
+        this.customerName = customerName;
+        this.totalAmount = totalAmount;
+    }
+
+    public String getCustomerName() { return customerName; }
+    public Double getTotalAmount() { return totalAmount; }
+}
+
+//////////////////////////////////////
+// PROJECTIONS
+//////////////////////////////////////
+
+// Question 2 Projection
+interface CustomerAddressView {
+    String getFullName();
+    AddressView getAddress();
+
+    interface AddressView {
+        String getCity();
+        String getCountry();
+    }
+}
+
+//////////////////////////////////////
+// REPOSITORIES
+//////////////////////////////////////
+
+interface ProductRepository extends JpaRepository<Product, Long> {
+
+    // Question 1 JPQL
+    @Query("""
+        SELECT new com.example.demo.CategoryStatsDto(c.title, COUNT(p))
+        FROM Product p
+        JOIN p.category c
+        GROUP BY c.title
+        HAVING COUNT(p) > 3
+        ORDER BY c.title ASC
+    """)
+    List<CategoryStatsDto> getCategoryStats();
+}
+
+interface CustomerRepository extends JpaRepository<Customer, Long> {
+
+    // Question 2 JPQL
+    @Query("""
+        SELECT c FROM Customer c
+        JOIN c.address a
+    """)
+    List<CustomerAddressView> getCustomerAddressView();
+}
+
+interface OrderRepository extends JpaRepository<OrderEntity, Long> {
+
+    // Question 3 JPQL + Pagination
+    @Query("""
+        SELECT new com.example.demo.OrderSummaryDto(o.customerName, o.totalAmount)
+        FROM OrderEntity o
+        WHERE o.orderDate > :date
+    """)
+    Page<OrderSummaryDto> getOrdersAfterDate(LocalDate date, Pageable pageable);
+}
+
+interface TeacherRepository extends JpaRepository<Teacher, Long> {
+
+    // Question 4 JPQL
+    @Query("""
+        SELECT t FROM Teacher t
+        WHERE t.subject LIKE 'M%'
+    """)
+    List<Teacher> findTeachersWithSubjectStartingM();
+}
+
+//////////////////////////////////////
+// SERVICES
+//////////////////////////////////////
+
+@Service
+class AppService {
+
+    @Autowired
+    private ProductRepository productRepository;
+
+    @Autowired
+    private CustomerRepository customerRepository;
+
+    @Autowired
+    private OrderRepository orderRepository;
+
+    @Autowired
+    private TeacherRepository teacherRepository;
+
+    // Question 1
+    public List<CategoryStatsDto> getCategoryStats() {
+        return productRepository.getCategoryStats();
+    }
+
+    // Question 2
+    public List<CustomerAddressView> getCustomers() {
+        return customerRepository.getCustomerAddressView();
+    }
+
+    // Question 3
+    public Page<OrderSummaryDto> getOrders(Pageable pageable) {
+        return orderRepository.getOrdersAfterDate(
+                LocalDate.of(2025, 1, 1),
+                pageable
+        );
+    }
+
+    // Question 4 (Validation + Transaction)
+    @Transactional
+    public Teacher saveTeacher(Teacher teacher) {
+        if (teacher.getSalary() <= 1000) {
+            throw new RuntimeException("Salary must be greater than 1000");
+        }
+        return teacherRepository.save(teacher);
+    }
+
+    public List<Teacher> getMathTeachers() {
+        return teacherRepository.findTeachersWithSubjectStartingM(
